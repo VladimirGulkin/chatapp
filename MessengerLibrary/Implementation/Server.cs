@@ -1,28 +1,33 @@
 ﻿using MessengerLibrary.Contracts;
-using SimpleQueue;
-using SimpleQueue.Contracts;
+using MessengerLibrary.Models;
 
 namespace MessengerLibrary.Implementation;
 
 public class Server : IServer
 {
-    private IMessageBus<IChatMessage> _messageBus;
+    private IMessageBus _messageBus;
 
-    public Server(IMessageBus<IChatMessage> messageBus)
+    public Server(IMessageBus messageBus)
     {
         _messageBus = messageBus;
     }
 
-    public void InitializeConnection()
+    public void RegisterClient(IClient client)
     {
-        _messageBus.MessageReceived += OnMessageReceived;
+        if (client is null)
+            throw new ArgumentNullException(nameof(client));
+
+        if (client.ConnectedUserId == Guid.Empty)
+            throw new ArgumentException("Client with empty Id cannot be connected", nameof(client.ConnectedUserId));
+        
+        _messageBus.Subscribe((ISubscriber)client);
     }
 
-    private void OnMessageReceived(object? sender, MessageReceivedEventArgs<IChatMessage> e)
+    public void SendMessageToClients(Message message, IClient sender)
     {
-        if (e.Message.Message.Sender.Id == Guid.Empty)
+        if (sender.ConnectedUserId == Guid.Empty)
             throw new ArgumentException("Client Id could not be empty");
-
-        _messageBus.PublishToSubscribers(e.Message);
+        
+        _messageBus.Publish(new BusMessage(message), (ISubscriber)sender);
     }
 }

@@ -1,8 +1,7 @@
 ﻿namespace MessengerLibrary.Contracts;
 
-public interface IClient
+public interface IClient 
 {
-    Guid Id { get; }
     void SendMessage(IChatMessage message);
-    void ConnectToServer();
+    Guid ConnectedUserId { get; }
 }

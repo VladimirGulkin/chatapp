@@ -1,5 +1,4 @@
 ﻿using MessengerLibrary.Contracts;
-using SimpleQueue.Contracts;
 
 namespace MessengerLibrary.Implementation;
 

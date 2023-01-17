@@ -7,13 +7,12 @@ using MessengerLibrary.Contracts;
 using NUnit.Framework;
 using MessengerLibrary.Implementation;
 using MessengerLibrary.Models;
-using SimpleQueue.Contracts;
 
 namespace MessengerTests;
 
 public class Tests
 {
-    private IMessageBus<IChatMessage> _messageBus;
+    private IMessageBus _messageBus;
     private IServer _server;
 
     [SetUp]
@@ -21,41 +20,44 @@ public class Tests
     {
         _messageBus = new MessageBus();
         _server = new Server(_messageBus);
-        _server.InitializeConnection();
     }
 
     [Test]
     public void NotGettingOwnMessagesTest()
     {
-        //Check count of messages
         var userA = new User("UserA");
         var userB = new User("UserB");
         var clientAHistory = new List<IChatMessage>();
         var clientBHistory = new List<IChatMessage>();
-        var clientA = Client.CreateClient(_messageBus, clientAHistory.Add, userA);
-        var clientB = Client.CreateClient(_messageBus, clientBHistory.Add, userB);
-        clientA.ConnectToServer();
-        clientB.ConnectToServer();
+        var clientA = Client.CreateClient(_messageBus, clientAHistory.Add);
+        var clientB = Client.CreateClient(_messageBus, clientBHistory.Add);
+        clientA.ConnectUserToClient(userA);
+        clientB.ConnectUserToClient(userB);
         var userAMessage = new Message(userA, $"Hello, I'm {userA.Name}");
         var userBMessage = new Message(userB, $"Hello, I'm {userB.Name}");
+        _server.RegisterClient(clientA);
+        _server.RegisterClient(clientB);
 
         clientA.SendMessage(userAMessage);
         clientB.SendMessage(userBMessage);
+
+        var clientAReceivedMessage = clientAHistory.FirstOrDefault();
+        var clientBReceivedMessage = clientBHistory.FirstOrDefault();
         
-        Assert.AreEqual(1, clientAHistory.Count, $"Received messages count mismatch: expected 1 message, but was {clientAHistory.Count}");
-        Assert.AreEqual(1, clientAHistory.Count, $"Received messages count mismatch: expected 1 message, but was {clientBHistory.Count}");
-        
-        Assert.That(string.Equals(clientAHistory.FirstOrDefault(), userBMessage));
-        Assert.That(string.Equals(clientBHistory.FirstOrDefault(), userAMessage));
+        Assert.AreEqual(1, clientAHistory.Count, $"Messages count mismatch: expected 1, but got {clientAHistory.Count}");
+        Assert.AreEqual(1, clientBHistory.Count, $"Messages count mismatch: expected 1, but got {clientBHistory.Count}");
+
+        Assert.That(string.Equals(clientAReceivedMessage, userBMessage));
+        Assert.That(string.Equals(clientBReceivedMessage, userAMessage));
     }
 
     [Test]
     public void UserExpirationTest()
     {
         var user = new User("user");
-        var client = Client.CreateClient(_messageBus, null, user);
-        client.ConnectToServer();
-       
+        var client = Client.CreateClient(_messageBus, null);
+        client.ConnectUserToClient(user);
+        _server.RegisterClient(client);
 
         var typeOfUser = typeof(User);
         var field = typeOfUser.GetField("LastActiveDateTime", BindingFlags.NonPublic | BindingFlags.Instance);
@@ -72,12 +74,12 @@ public class Tests
         var messageCache = new List<IChatMessage>();
         var user = new User("user");
         var user2 = new User("user2");
-        var firstClient = Client.CreateClient(_messageBus, null, user);
-        firstClient.ConnectToServer();
-      
-        var secondClient = Client.CreateClient(_messageBus, messageCache.Add, user2);
-        secondClient.ConnectToServer();
-        
+        var firstClient = Client.CreateClient(_messageBus, null);
+        firstClient.ConnectUserToClient(user);
+        _server.RegisterClient(firstClient);
+        var secondClient = Client.CreateClient(_messageBus, messageCache.Add);
+        secondClient.ConnectUserToClient(user2);
+        _server.RegisterClient(secondClient);
         var msg1 = new Message(user, "First message");
         var msg2 = new Message(user, "Second message");
         var msg3 = new Message(user, "Third message");
@@ -96,15 +98,23 @@ public class Tests
     public void CantConnectNullUser()
     {
         User user = null;
+        var client = Client.CreateClient(_messageBus, null);
         
-        Assert.Throws<ArgumentNullException>(() => Client.CreateClient(_messageBus, null, user));
+        Assert.Throws<ArgumentNullException>(() => client.ConnectUserToClient(user));
     }
     
     [Test]
-    public void CantCreateClientWithoutMessageBus()
+    public void CantConnectClientWithoutId()
     {
-        var user = new User("Test user");
-        Assert.Throws<ArgumentNullException>(() => Client.CreateClient(null, null, user));
+        var client = Client.CreateClient(_messageBus, null);
+        Assert.Throws<ArgumentException>(() => _server.RegisterClient(client));
+    }
+    
+    [Test]
+    public void CantConnectNullClient()
+    {
+        Client client = null;
+        Assert.Throws<ArgumentNullException>(() => _server.RegisterClient(client));
     }
     
     [Test]

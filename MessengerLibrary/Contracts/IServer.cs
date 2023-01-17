@@ -1,8 +1,9 @@
-﻿using SimpleQueue;
+﻿using MessengerLibrary.Models;
 
 namespace MessengerLibrary.Contracts;
 
 public interface IServer
 {
-    void InitializeConnection();
+    void RegisterClient(IClient client);
+    void SendMessageToClients(Message message, IClient sender);
 }

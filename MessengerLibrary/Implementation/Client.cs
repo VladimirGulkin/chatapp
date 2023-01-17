@@ -1,28 +1,31 @@
 ﻿using MessengerLibrary.Contracts;
 using MessengerLibrary.Implementation;
 using MessengerLibrary.Models;
-using SimpleQueue.Contracts;
 
 namespace MessengerLibrary;
 
-public class Client : IClient, ISubscriber<IChatMessage>
+public class Client : IClient, ISubscriber
 {
-    private IMessageBus<IChatMessage> _messageBus;
+    private IMessageBus _messageBus;
     private Action<IChatMessage>? _incomingMessageHandler;
-    public Guid Id { get; private set; } = Guid.Empty;
+    public Guid ConnectedUserId { get; private set; } = Guid.Empty;
 
-    public static Client CreateClient(IMessageBus<IChatMessage> messageBus, Action<IChatMessage>? incomingMessageHandler, User user)
+    public static Client CreateClient(IMessageBus messageBus, Action<IChatMessage>? incomingMessageHandler)
     {
-        return new(messageBus, incomingMessageHandler, user);
+        return new(messageBus, incomingMessageHandler);
     }
 
-    private Client(IMessageBus<IChatMessage> messageBus, Action<IChatMessage>? incomingMessageHandler, User user)
+    public void ConnectUserToClient(User user)
     {
-        if (user == null)
-            throw new ArgumentNullException(nameof(user),"User cannot be null");
+        if (user is null)
+            throw new ArgumentNullException(nameof(user),"User could not be null");
+        
+        ConnectedUserId = user.Id;
+    }
 
-        Id = user.Id;
-        _messageBus = messageBus ?? throw new ArgumentNullException(nameof(messageBus),"User cannot be null");
+    private Client(IMessageBus messageBus, Action<IChatMessage>? incomingMessageHandler)
+    {
+        _messageBus = messageBus;
         _incomingMessageHandler = incomingMessageHandler;
     }
 
@@ -30,18 +33,13 @@ public class Client : IClient, ISubscriber<IChatMessage>
     {
         if (IsUsernameExpired(message.Sender))
         {
-            Id = Guid.Empty;
+            ConnectedUserId = Guid.Empty;
             throw new TimeoutException(
                 $"User inactivity limit expired; Last activity time {message.Sender.LastActiveDateTime}, current time {DateTime.Now}");
         }
 
         message.Sender.LastActiveDateTime = DateTime.UtcNow;
-        _messageBus.Send(new BusMessage(message), this);
-    }
-
-    public void ConnectToServer()
-    {
-        _messageBus.Subscribe(this);
+        _messageBus.Publish<IChatMessage>(new BusMessage(message), this);
     }
 
     private bool IsUsernameExpired(User user)
@@ -51,13 +49,14 @@ public class Client : IClient, ISubscriber<IChatMessage>
 
     public void OnMessageReceived(IChatMessage message)
     {
-        _incomingMessageHandler?.Invoke(message);
+        if(_incomingMessageHandler != null)
+            _incomingMessageHandler(message);
     }
 
     public override bool Equals(object? obj)
     {
         if(obj is Client client)
-            return this.Id == client.Id;
+            return this.ConnectedUserId == client.ConnectedUserId;
         return false;
     }
 }
